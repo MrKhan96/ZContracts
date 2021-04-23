@@ -208,4 +208,4 @@ def ocrDoc(nameX):
     except Exception as ex:
         print(time.time()-start)
         print(ex)
-        return "Saved File not Found"
+        return "Saved File not Found {}".format(ex)
