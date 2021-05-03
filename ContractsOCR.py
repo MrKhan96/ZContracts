@@ -1,5 +1,6 @@
 from trp import Document
-import json
+import json,logging
+from botocore.exceptions import ClientError
 from json import JSONEncoder
 import re
 from pathlib import Path
@@ -8,17 +9,25 @@ import time
 import itertools
 import json
 import os
-# import pdfplumber
+import pymongo
 import datetime
 import boto3
 import pandas as pd
+import gridfs,base64
 import multiprocessing as mp
 from multiprocessing.pool import ThreadPool
 from pdf2image import convert_from_path
 import numpy as np
+from botocore.client import Config
 
 tablesList = list()
-textract = boto3.client('textract')
+
+config = Config(retries = dict(max_attempts = 15))
+textract = boto3.client('textract',config=config)
+
+myclient = pymongo.MongoClient("mongodb://localhost:27017/")
+mydb = myclient["ZContracts"]
+
 
 
 class Grouper:
@@ -139,30 +148,76 @@ def get_Lines(pgno, data):
     return pd.DataFrame(lines)
 
 
-def txtrctAPI(img):
-
+def get_jpeg(img):
     imgByteArr = io.BytesIO()
     img.save(imgByteArr, format="jpeg")
-    img = imgByteArr.getvalue()
+    return imgByteArr.getvalue()
+
+
+def txtrctAPI(img):
     return textract.analyze_document(
         Document={
-            'Bytes': img,
+            'Bytes': get_jpeg(img),
         },
         FeatureTypes=["TABLES"])
 
+
+def get_images(pdf):
+    print("Getting Image")
+    imgs=list()
+    example = Pdf.open(pdf)
+    for page in example.pages:
+        imkeys=list(page.images.keys())
+        for key in imkeys:
+            imgs.append(PdfImage(page.images[key]).as_pil_image())
+            print("Width and Height:{}".format(PdfImage(page.images[key]).as_pil_image().size))
+    x=[ a.save("images/{}.jpg".format(i)) for i,a in enumerate(imgs)]
+    return imgs
+
+
+def write_new_pdf(path,db):
+    # db = MongoClient('mongodb://localhost:27017/').myDB
+    fs = gridfs.GridFS(db)
+    # Note, open with the "rb" flag for "read bytes"
+    with open(path, "rb") as f:
+        encoded_string = base64.b64encode(f.read())
+    with fs.new_file(chunkSize=8000000,filename=path) as fp:
+        fp.write(encoded_string)
+
+
+def mongo_image(img,db):
+    # db = MongoClient('mongodb://localhost:27017/').myDB
+    fs = gridfs.GridFS(db)
+    # Note, open with the "rb" flag for "read bytes"
+    with open(path, "rb") as f:
+        encoded_string = base64.b64encode(f.read())
+    with fs.new_file(chunkSize=8000000,filename=path) as fp:
+        fp.write(encoded_string)
+
+
+def read_pdf(filename,db):
+    # Usual setup
+    # db = MongoClient('mongodb://localhost:27017/').myDB
+    fs = gridfs.GridFS(db)
+    # Standard query to Mongo
+    data = fs.find_one(filter=dict(filename=filename))
+    with open(filename, "wb") as f:
+        f.write(base64.b64decode(data.read()))
 
 def ocrDoc(nameX):
 
     print(datetime.datetime.now())
     start = time.time()
+    print("Starting, {}".format(nameX))
     try:
-        # pdf=pdfplumber.open('uploads/{}'.format(nameX))
-        # imgs=[page.to_image() for page in pdf.pages]
         images = convert_from_path('uploads/{}'.format(nameX))
+        print("GOT Images: {}".format(len(images)))
+        print(time.time()-start)
         print(time.time()-start)
 
         p2 = ThreadPool(mp.cpu_count())
         axe = p2.map(txtrctAPI, images)
+        
         print(time.time()-start)
         p2.close()
 
@@ -199,13 +254,28 @@ def ocrDoc(nameX):
         df = df[["Text", "Page", "Left", "Top", "Height", "Width", "Label"]]
         print(df.head())
         print(time.time()-start)
-
-        final_results = {"Text": df.to_dict("records"), "Tables": tablesList}
-
-        with open("JSON_Results/{}.json".format(nameX), "w") as ads:
-            ads.write(json.dumps(final_results))
-        return str(final_results)
+        df=df.to_dict("records")
+        final_results = {"Text": df, "Tables": tablesList}
+        
+        p2 = ThreadPool(mp.cpu_count())
+        images = p2.map(get_jpeg, images)
+        
+        col=mydb["ContractsOCR"]
+        write_new_pdf('uploads/{}'.format(nameX),mydb)
+        
+        fs = gridfs.GridFS(database=mydb,collection="ContractsOCR")
+        
+        images={ str(n):fs.put(data=i,filename="{}_Page_{}".format(nameX,n)) for n,i in enumerate(images)  }
+        
+        col.insert({
+            "DocName":nameX,
+            "Images":images,
+            "Text": df,
+            "Tables": tablesList
+        })
+        
+        return final_results
     except Exception as ex:
         print(time.time()-start)
         print(ex)
-        return "Saved File not Found {}".format(ex)
+        return "Error Found: {}".format(ex)
