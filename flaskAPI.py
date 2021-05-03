@@ -22,7 +22,7 @@ def home():
     print("hello world")
     return "Hello World"
 
-@app.route('/file-upload', methods=['POST'])
+@app.route('/contract-ocr', methods=['POST'])
 def upload_file():
     # check if the post request has the file part
     if request.form.get("File"):
