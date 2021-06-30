@@ -4,6 +4,8 @@ import urllib.request
 from flask import Flask, request, redirect, jsonify
 from werkzeug.utils import secure_filename
 from ContractsOCR import ocrDoc
+from pdfContract import extract_from_pdf
+
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = "uploads"
@@ -41,7 +43,7 @@ def upload_file():
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         # file.save(os.path.join(basedir, app.config['UPLOAD_FOLDER'], filename))
         resp = jsonify(
-            {'message': 'File successfully uploaded :{}'.format(filename),'results':ocrDoc(filename)})
+            {'message': 'File successfully uploaded :{}'.format(filename),'results':extract_from_pdf(filename)})
         # j=ocrDoc(filename)
         if os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'] , filename)):
             os.remove(os.path.join(app.config['UPLOAD_FOLDER'] , filename))
