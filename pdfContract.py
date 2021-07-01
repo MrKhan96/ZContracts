@@ -58,7 +58,7 @@ def get_tables(a):
 def get_border_tables(file):
     global maxPageSize
     # # Table and Text Extraction
-    pdf = pdfplumber.open(file)
+    pdf = pdfplumber.open("uploads/{}".format(file))
     page_1 = pdf.pages[0]
     maxPageSize=(page_1.height)
     print(time.time()-start)
