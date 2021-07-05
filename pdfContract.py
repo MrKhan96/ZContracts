@@ -540,4 +540,4 @@ def extract_from_pdf(file=None):
         else:
             data = hnText
         print(time.time()-start)
-        return {'Text':'{}'.format(data),'Bordered Tables':bless_Table,'Borderless Tables':bTables}
+        return {'Text':data,'Bordered Tables':bless_Table,'Borderless Tables':bTables}
