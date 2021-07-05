@@ -477,8 +477,9 @@ def extract_from_pdf(file=None):
         awe = list(filter(None, awe))
         print(time.time()-start)
         bTables=get_border_tables(file)
+        dmy=bTables
         bless_Table=list()
-        for (a, b) in itertools.product(awe, bTables):
+        for (a, b) in itertools.product(awe, dmy):
             if a['Page']==b['Page'] and not is_intersect(a['BBox'], b['BBox']):
                 bless_Table.append(a)
         print('len after:{}'.format(len(bless_Table)))
