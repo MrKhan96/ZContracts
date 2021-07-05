@@ -478,12 +478,12 @@ def extract_from_pdf(file=None):
         print(time.time()-start)
         bTables=get_border_tables(file)
         pprint(bTables[0])
-        dmy=bTables
-        bless_Table=list()
-        for (a, b) in itertools.product(awe, dmy):
-            if a['Page']==b['Page'] and not is_intersect(a['BBox'], b['BBox']):
-                bless_Table.append(a)
-        print('len after:{}'.format(len(bless_Table)))
+        # dmy=bTables
+        # bless_Table=list()
+        # for (a, b) in itertools.product(awe, dmy):
+        #     if a['Page']==b['Page'] and not is_intersect(a['BBox'], b['BBox']):
+        #         bless_Table.append(a)
+        # print('len after:{}'.format(len(bless_Table)))
         data=final_df[final_df['SScore']>0]['Text'].values.tolist()
         data=Counter(data)
         dd=[k for k, c in data.items() if c < 5]
@@ -542,4 +542,4 @@ def extract_from_pdf(file=None):
         else:
             data = hnText
         print(time.time()-start)
-        return {'Text':data,'Bordered Tables':bless_Table,'Borderless Tables':bTables}
+        return {'Text':data,'Bordered Tables':awe,'Borderless Tables':bTables}
