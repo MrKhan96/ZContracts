@@ -477,6 +477,7 @@ def extract_from_pdf(file=None):
         awe = list(filter(None, awe))
         print(time.time()-start)
         bTables=get_border_tables(file)
+        pprint(bTables[0])
         dmy=bTables
         bless_Table=list()
         for (a, b) in itertools.product(awe, dmy):
