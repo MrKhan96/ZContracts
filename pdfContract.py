@@ -47,7 +47,7 @@ def get_tables(a):
                     jd=len(set.intersection(set(colHeadings),set(headText)))
                     if jd==len(set(colHeadings)) or jd==0:
                         l,tp,rt,bt=table.bbox
-                        tlist.append({'Page':a+1,"Columns":colHeadings,"Table":t,"BBox": {'Left': l, 'Top': tp, 'Right': rt, 'Bottom': bt}})
+                        tlist.append({'Page':a+1,"Columns":colHeadings,"Table":t,"BBox": {'Left': int(l), 'Top': int(tp), 'Right': int(rt), 'Bottom': int(bt)}})
     except Exception as ex:
         print(ex)
     if len(tlist)!=0:
