@@ -8,7 +8,7 @@ from pdfminer.layout import LAParams
 from pdfminer.converter import PDFPageAggregator
 # from pdfminer.pdfparser import PDFParser
 from pdfminer.pdfdocument import PDFDocument
-import json
+import json,itertools
 import pandas as pd
 import sys
 import re
@@ -46,7 +46,8 @@ def get_tables(a):
                     colHeadings=t.pop(0)
                     jd=len(set.intersection(set(colHeadings),set(headText)))
                     if jd==len(set(colHeadings)) or jd==0:
-                        tlist.append({'Page':a+1,"Column Headings":colHeadings,"Table":t,"BBox":table.bbox})
+                        l,tp,rt,bt=table.bbox
+                        tlist.append({'Page':a+1,"Columns":colHeadings,"Table":t,"BBox": {'Left': l, 'Top': tp, 'Right': rt, 'Bottom': bt}})
     except Exception as ex:
         print(ex)
     if len(tlist)!=0:
@@ -252,7 +253,7 @@ def get_table_rects(lst):
         if len(lst) > 1:
             ele = lst.pop(0)
             for i in lst:
-                if not is_intersect(i['Coords'], ele['Coords']):
+                if not is_intersect(i['BBox'], ele['BBox']):
                     jk.append(i)
 
             jk.extend(get_table_rects(lst))
@@ -275,9 +276,17 @@ def is_intersect(r1, r2):
     # else:
     #     return True
 
+def get_table_struct(tbdf):
+    rows=list()
+    for top,x in tbdf.groupby('Top'):
+        row=dict()
+        for jojo in x.to_dict('records'):
+            row[jojo['column']]=jojo['Text']
+        rows.append(row)
+    return pd.DataFrame(rows)
 
 def tb_detr(x):
-    x,ylvl=x
+    x,PgNO,ylvl=x
     a, x = x
     tbDF = pd.DataFrame()
     cols_cords = dict()
@@ -330,7 +339,7 @@ def tb_detr(x):
     rowId=list(set(rowId))
 
     if bool(tble):
-        return {"Coords":dek,"area":(dek["Left"]-dek["Right"])*(dek['Top']-dek["Bottom"]),"Table": tble}
+        return {"BBox":dek,"Page":PgNO,"Table": get_table_struct(tbDF),"Columns":list(tble.keys())}
     else:
         return None
 
@@ -339,36 +348,8 @@ def page_table_det(df):
     pgNo, df = df
     ylvl = df.groupby(["Top"])
 
-    ado = [((a, x),ylvl) for a, x in ylvl if len(x) > 2]
-    # tablesList = list()
+    ado = [((a, x),pgNo,ylvl) for a, x in ylvl if len(x) > 2]
 
-    # for a, x in ylvl:
-    #     if len(x) > 2:
-    #         tbDF = pd.DataFrame()
-    #         cols_cords = dict()
-    #         cols_dict = dict()
-    #         for jojo in x.to_dict('records'):
-    #             cols_cords[jojo['Text']] = (
-    #                 jojo['Left'], jojo['Top'], jojo['Width'], jojo['Height'])
-    #             cols_dict[jojo['Text']] = list()
-    #             for b, y in ylvl:
-    #                 if b != a:
-    #                     for dodo in y.to_dict('records'):
-    #                         rDic = get_intersection(dodo, cols_cords)
-    #                         if rDic:
-    #                             for key, value in rDic.items():
-    #                                 if value == True:
-    #                                     dodo['column'] = key
-    #                                     dodo['Right'] = dodo['Left'] + \
-    #                                         dodo['Width']
-    #                                     dodo['Bottom'] = dodo['Top'] + \
-    #                                         dodo['Height']
-    #                                     tbDF = tbDF.append(
-    #                                         pd.DataFrame(dodo, index=[0]))
-    #                                     cols_dict[key].append(dodo)
-    #         dek = {'Left': tbDF['Left'].min(), 'Top': tbDF['Bottom'].max(
-    #         ), 'Right': tbDF['Right'].max(), 'Bottom': tbDF['Top'].min()}
-    #         tablesList.append((dek, cols_dict))
     t3 = mp.Pool(mp.cpu_count())
     tablesList = t3.map(tb_detr, ado)
     t3.close()
@@ -381,11 +362,9 @@ def page_table_det(df):
         print(tl[0].get('Table').keys())
         print('PageNo:{}'.format(pgNo))
         print(len(tl))
-        return {pgNo: tl}
-        # return {pgNo: tablesList}
+        return tl
     else:
         return None
-    # return {pgNo: tablesList}
 
 
 def score(row):
@@ -492,12 +471,17 @@ def extract_from_pdf(file=None):
         p1 = ThreadPool(mp.cpu_count())
         awe = p1.map(page_table_det, pdfs)
         awe=[x for x in awe if x is not None]
+        awe=[item for sublist in awe for item in sublist if sublist is not None]
         print("Len before :{}".format(len(awe)))
         p1.close()
         awe = list(filter(None, awe))
         print(time.time()-start)
         bTables=get_border_tables(file)
-
+        bless_Table=list()
+        for (a, b) in itertools.product(awe, bTables):
+            if a['Page']==b['Page'] and not is_intersect(a['BBox'], b['BBox']):
+                bless_Table.append(a)
+        print('len after:{}'.format(len(bless_Table)))
         data=final_df[final_df['SScore']>0]['Text'].values.tolist()
         data=Counter(data)
         dd=[k for k, c in data.items() if c < 5]
@@ -537,6 +521,7 @@ def extract_from_pdf(file=None):
         final_df=final_df[final_df['Top'] > hfooters]
         final_df= final_df.sort_values(
             ["Page", "Top", "Left"], ascending=[True, False, True])
+
         data=final_df[["Text","SScore"]].to_dict("records")
         hnText=list()
         node={"Heading":None,"Text":" "}
@@ -550,15 +535,9 @@ def extract_from_pdf(file=None):
             if x['SScore'] == 0:
                 node['Text']=node['Text']+x['Text']
 
-        # with open("testDrive2.json",'w') as fb:
-        #     json.dump(hnText,fb)
-        # pprint(hnText)
-        # pprint(final_df.head(50))
-        
-        
         if len(hnText)==0:
             data=final_df['Text'].values.tolist()
         else:
             data = hnText
         print(time.time()-start)
-        return data
+        return {'Text':'{}'.format(data),'Bordered Tables':bless_Table,'Borderless Tables':bTables}
